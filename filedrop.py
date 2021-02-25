@@ -6,12 +6,11 @@ import subprocess
 import requests
 import argparse
 import xml.etree.ElementTree as ElementTree
-
+import lxml.html
 
 parser = argparse.ArgumentParser()
 parser.add_argument('username', type=str)
 parser.add_argument('password', type=str)
-parser.add_argument('webdav_user_uuid', type=str) # check <root>/remote.php/dav/files/<webdav_user_uuid> See "Settings" in webinterface
 parser.add_argument('--input', '-i', help='file with foldernames', type=str, required=True)
 parser.add_argument('--url', '-u', type=str, default="https://ificloud.xsitepool.tu-freiberg.de")
 parser.add_argument('--verbose', action='count', default=0)
@@ -23,6 +22,21 @@ with open(args.input) as file:
 
 foldernames = [name.strip() for name in foldernames]
 
+# get the users folder name, this is either the name itself or a uuid (when using ldap)
+command_get_html = "curl -s -X GET -u "
+command_get_html += args.username + ":" 
+command_get_html += args.password + " '" 
+command_get_html += args.url 
+command_get_html += "/index.php/apps/files'"
+
+html_string = subprocess.check_output(command_get_html, shell=True).decode('utf8').strip('\n')
+html = lxml.html.fromstring(html_string)
+webdavurls = html.xpath('//*[starts-with(@id, "webdavurl")]')
+for url in webdavurls:
+    webdavfolder = url.get('value')
+
+webdavfolder = webdavfolder.split("/dav/files/")[1].split("/")[0]
+
 for foldername in foldernames:
     # create folder
     command_create = "curl -s -X MKCOL -u " 
@@ -30,7 +44,7 @@ for foldername in foldernames:
     command_create += args.password + " '" 
     command_create += args.url 
     command_create += "/remote.php/dav/files/" 
-    command_create += args.webdav_user_uuid + "/" 
+    command_create += webdavfolder + "/" 
     command_create += foldername + "'"
 
     if args.verbose:
